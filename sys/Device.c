@@ -514,6 +514,48 @@ VOID DsDevice_ReadConfiguration(WDFDEVICE Device)
 	TraceVerbose(TRACE_DEVICE, "[COM] WirelessIdleTimeoutPeriodMs: %d",
 		pDevCtx->Configuration.WirelessIdleTimeoutPeriodMs);
 
+	WDF_DEVICE_PROPERTY_DATA_INIT(&propertyData, &DEVPKEY_DsHidMini_RW_LargeRumbleDeadzone);
+
+	(void)WdfDeviceQueryPropertyEx(
+		Device,
+		&propertyData,
+		sizeof(UCHAR),
+		&pDevCtx->Configuration.LargeRumbleDeadzone,
+		&requiredSize,
+		&propertyType
+	);
+
+	TraceVerbose(TRACE_DEVICE, "[COM] LargeRumbleDeadzone: %d",
+		pDevCtx->Configuration.LargeRumbleDeadzone);
+
+	WDF_DEVICE_PROPERTY_DATA_INIT(&propertyData, &DEVPKEY_DsHidMini_RW_SmallRumbleThreshold);
+
+	(void)WdfDeviceQueryPropertyEx(
+		Device,
+		&propertyData,
+		sizeof(ULONG),
+		&pDevCtx->Configuration.SmallRumbleThreshold,
+		&requiredSize,
+		&propertyType
+	);
+
+	TraceVerbose(TRACE_DEVICE, "[COM] SmallRumbleThreshold: %d",
+		pDevCtx->Configuration.SmallRumbleThreshold);
+
+	WDF_DEVICE_PROPERTY_DATA_INIT(&propertyData, &DEVPKEY_DsHidMini_RW_SmallRumbleDiversion);
+
+	(void)WdfDeviceQueryPropertyEx(
+		Device,
+		&propertyData,
+		sizeof(ULONG),
+		&pDevCtx->Configuration.SmallRumbleDiversion,
+		&requiredSize,
+		&propertyType
+	);
+
+	TraceVerbose(TRACE_DEVICE, "[COM] SmallRumbleDiversion: %d",
+		pDevCtx->Configuration.SmallRumbleDiversion);
+
 	//
 	// Read hot-reloadable properties
 	//

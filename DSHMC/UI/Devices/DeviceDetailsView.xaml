@@ -10,10 +10,11 @@
              xmlns:drivers="clr-namespace:Nefarius.DsHidMini.Drivers"
              xmlns:extensions="clr-namespace:AdonisUI.Extensions;assembly=AdonisUI"
              mc:Ignorable="d"
-             d:DesignHeight="550" d:DesignWidth="450">
+             d:DesignHeight="650" d:DesignWidth="450">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="VisibleIfTrueConverter" />
         <wpf:BoolMultiValueConverter x:Key="BoolMultiValueConverter" />
+        <wpf:ByteToPercentConverter x:Key="ByteToPercentConverter" />
     </UserControl.Resources>
     <GroupBox
         Header="Device Details"
@@ -27,6 +28,9 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -462,8 +466,169 @@
                     </DockPanel.ToolTip>
                 </DockPanel>
 
+                <!-- Large Rumble Deadzone -->
+                <TextBlock Grid.Row="7" Grid.Column="0">Large rumble deadzone:</TextBlock>
+                <DockPanel Grid.Row="7" Grid.Column="2" LastChildFill="False">
+                    <Slider Width="160"
+                            AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0"
+                            Minimum="0"
+                            TickFrequency="1"
+                            Maximum="255"
+                            IsSnapToTickEnabled="True"
+                            Margin="{adonisUi:Space 1}"
+                            Value="{Binding Path=SelectedDevice.LargeRumbleDeadzone}">
+                        <Slider.IsEnabled>
+                            <MultiBinding Converter="{StaticResource BoolMultiValueConverter}">
+                                <Binding Path="IsEditable"/>
+                                <!--<Binding Path="SelectedDevice.IsWireless"/>-->
+                            </MultiBinding>
+                        </Slider.IsEnabled>
+                    </Slider>
+                    <TextBlock Text="{Binding Path=SelectedDevice.LargeRumbleDeadzone, Converter={StaticResource ByteToPercentConverter}}" />
+                    <TextBlock Margin="5,0,0,0">Percent</TextBlock>
+
+                    <DockPanel.ToolTip>
+                        <ToolTip controlzex:ToolTipAssist.AutoMove="True">
+                            <ToolTip.Template>
+                                <ControlTemplate>
+                                    <Grid>
+                                        <Border Background="Gray"
+                                                BorderBrush="Black"
+                                                BorderThickness="1"
+                                                Opacity="0.9"
+                                                SnapsToDevicePixels="True" />
+                                        <StackPanel>
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       FontWeight="Bold"
+                                                       Text="Large Rumble Deadzone"
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       Text="Offsets the threshold until rumble intensity takes effect. If rumble doesn't intiate at low intensity, tweak until it turns on"
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                        </StackPanel>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ToolTip.Template>
+                        </ToolTip>
+                    </DockPanel.ToolTip>
+                </DockPanel>
+
+
+                <!-- Small Rumble Threshold -->
+                <TextBlock Grid.Row="8" Grid.Column="0">Small Rumble Threshold:</TextBlock>
+                <DockPanel Grid.Row="8" Grid.Column="2" LastChildFill="False">
+                    <Slider Width="160"
+                            AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0"
+                            Minimum="0"
+                            TickFrequency="1"
+                            Maximum="255"
+                            IsSnapToTickEnabled="True"
+                            Margin="{adonisUi:Space 1}"
+                            Value="{Binding Path=SelectedDevice.SmallRumbleThreshold}">
+                        <Slider.IsEnabled>
+                            <MultiBinding Converter="{StaticResource BoolMultiValueConverter}">
+                                <Binding Path="IsEditable"/>
+                                <!--<Binding Path="SelectedDevice.IsWireless"/>-->
+                            </MultiBinding>
+                        </Slider.IsEnabled>
+                    </Slider>
+                    <TextBlock Text="{Binding Path=SelectedDevice.SmallRumbleThreshold, Converter={StaticResource ByteToPercentConverter}}" />
+                    <TextBlock Margin="5,0,0,0">Percent</TextBlock>
+
+                    <DockPanel.ToolTip>
+                        <ToolTip controlzex:ToolTipAssist.AutoMove="True">
+                            <ToolTip.Template>
+                                <ControlTemplate>
+                                    <Grid>
+                                        <Border Background="Gray"
+                                                BorderBrush="Black"
+                                                BorderThickness="1"
+                                                Opacity="0.9"
+                                                SnapsToDevicePixels="True" />
+                                        <StackPanel>
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       FontWeight="Bold"
+                                                       Text="Small rumble threshold"
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       Text="The threshold of intensity before activating the small rumble."
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                        </StackPanel>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ToolTip.Template>
+                        </ToolTip>
+                    </DockPanel.ToolTip>
+                </DockPanel>
+
+
+                <!-- Small Rumble Diversion -->
+                <TextBlock Grid.Row="9" Grid.Column="0">Small rumble diversion:</TextBlock>
+                <DockPanel Grid.Row="9" Grid.Column="2" LastChildFill="False">
+                    <Slider Width="160"
+                            AutoToolTipPlacement="TopLeft" AutoToolTipPrecision="0"
+                            Minimum="0"
+                            TickFrequency="1"
+                            Maximum="255"
+                            IsSnapToTickEnabled="True"
+                            Margin="{adonisUi:Space 1}"
+                            Value="{Binding Path=SelectedDevice.SmallRumbleDiversion}">
+                        <Slider.IsEnabled>
+                            <MultiBinding Converter="{StaticResource BoolMultiValueConverter}">
+                                <Binding Path="IsEditable"/>
+                                <!--<Binding Path="SelectedDevice.IsWireless"/>-->
+                            </MultiBinding>
+                        </Slider.IsEnabled>
+                    </Slider>
+                    <TextBlock Text="{Binding Path=SelectedDevice.SmallRumbleDiversion, Converter={StaticResource ByteToPercentConverter}}" />
+                    <TextBlock Margin="5,0,0,0">Percent</TextBlock>
+
+                    <DockPanel.ToolTip>
+                        <ToolTip controlzex:ToolTipAssist.AutoMove="True">
+                            <ToolTip.Template>
+                                <ControlTemplate>
+                                    <Grid>
+                                        <Border Background="Gray"
+                                                BorderBrush="Black"
+                                                BorderThickness="1"
+                                                Opacity="0.9"
+                                                SnapsToDevicePixels="True" />
+                                        <StackPanel>
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       FontWeight="Bold"
+                                                       Text="Small Rumble Diversion"
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                            <TextBlock Margin="{adonisUi:Space 1}"
+                                                       Foreground="WhiteSmoke"
+                                                       FontSize="16"
+                                                       Text="The amount of intensity to divert to large rumble. Typically used in conjunction if threshold is tweaked for gradual rumble."
+                                                       TextOptions.TextFormattingMode="Display"
+                                                       TextOptions.TextRenderingMode="ClearType" />
+                                        </StackPanel>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ToolTip.Template>
+                        </ToolTip>
+                    </DockPanel.ToolTip>
+                </DockPanel>
+
                 <!-- Output rate control -->
-                <Grid Grid.Row="7" Grid.Column="0" Margin="{adonisUi:Space 0, 1}">
+                <Grid Grid.Row="10" Grid.Column="0" Margin="{adonisUi:Space 0, 1}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -524,7 +689,7 @@
                 </Grid>
 
                 <!-- Rate control settings -->
-                <StackPanel Grid.Row="7" Grid.Column="2">
+                <StackPanel Grid.Row="10" Grid.Column="2">
                     <DockPanel LastChildFill="False">
                         <CheckBox Margin="{adonisUi:Space 1}"
                                   IsEnabled="{Binding Path=IsEditable}"

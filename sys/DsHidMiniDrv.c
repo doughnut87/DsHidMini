@@ -982,6 +982,12 @@ DsHidMini_WriteReport(
 			bufferSize
 		);
 
+		//sixaxis crap
+		if (pDevCtx->GyroData.rumbleSettingForGyro > 0)
+		{
+			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
+		}
+
 		(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourcePassThrough);
 
 		status = STATUS_SUCCESS;
@@ -1264,6 +1270,53 @@ void Ds_ProcessHidInputReport(PDEVICE_CONTEXT Context, PDS3_RAW_INPUT_REPORT Rep
 			pModCtx->InputReport
 		);
 
+		USHORT dYaw = _byteswap_ushort(Report->Gyroscope); // sixaxis test
+		if (Context->GyroData.calibDone == FALSE /*&& (dYaw < 10 || Context->GyroData.rumbleSettingForGyro != 0)*/)
+		{
+			LARGE_INTEGER now;
+			LARGE_INTEGER freq;
+			QueryPerformanceFrequency(&freq);
+			QueryPerformanceCounter(&now);
+
+			const USHORT deadzone = 25;
+
+			if (dYaw < (512 - deadzone))
+			{
+				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+				{
+					Context->GyroData.rumbleSettingForGyro++;
+					if (dYaw < 10)
+					{
+						Context->GyroData.rumbleSettingForGyro = 105; // some baseline value
+					}
+					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
+					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
+					Context->GyroData.lastCalibStamp = now;
+				}
+
+			}
+			else if (dYaw > (512 + deadzone))
+			{
+				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+				{
+					Context->GyroData.rumbleSettingForGyro--;
+					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
+					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
+					Context->GyroData.lastCalibStamp = now;
+				}
+			}
+			else
+			{
+				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+				{
+					Context->GyroData.calibDone = TRUE;
+				}
+			}
+		}
+
 		//
 		// Notify new Input Report is available
 		// 
@@ -1287,8 +1340,58 @@ void Ds_ProcessHidInputReport(PDEVICE_CONTEXT Context, PDS3_RAW_INPUT_REPORT Rep
 		DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 			Report,
 			pModCtx->InputReport,
-			(Context->ConnectionType == DsDeviceConnectionTypeUsb) ? TRUE : FALSE
+			(Context->ConnectionType == DsDeviceConnectionTypeUsb) ? TRUE : FALSE,
+			&Context->GyroData,
+			Context
 		);
+
+		USHORT dYaw = _byteswap_ushort(Report->Gyroscope); // sixaxis test
+		if (Context->GyroData.calibDone == FALSE/* && (dYaw < 10 || Context->GyroData.rumbleSettingForGyro != 0)*/)
+        {
+            LARGE_INTEGER now;
+            LARGE_INTEGER freq;
+            QueryPerformanceFrequency(&freq);
+            QueryPerformanceCounter(&now);
+			    
+            const USHORT deadzone = 25;
+
+            if (dYaw < (512 - deadzone))
+            {
+                LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+                if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+                {
+					Context->GyroData.rumbleSettingForGyro++;
+                    if (dYaw < 10)
+                    {
+						Context->GyroData.rumbleSettingForGyro = 105; // some baseline value
+                    }
+                    DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
+                    (void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
+					Context->GyroData.lastCalibStamp = now;
+                }
+
+            }
+            else if (dYaw > (512 + deadzone))
+            {
+				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+				{
+					Context->GyroData.rumbleSettingForGyro--;
+					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
+					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
+					Context->GyroData.lastCalibStamp = now;
+				}
+            }
+            else
+            {
+				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+                if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+                {
+					Context->GyroData.calibDone = TRUE;
+                }
+            }
+        }
+			
 
 		//
 		// Notify new Input Report is available
@@ -1398,6 +1501,15 @@ VOID DsUsb_EvtUsbInterruptPipeReadComplete(
 		pModCtx->GetFeatureReport.AccelerometerY = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerY);
 		pModCtx->GetFeatureReport.AccelerometerZ = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerZ);
 		pModCtx->GetFeatureReport.Gyroscope = _byteswap_ushort(pModCtx->GetFeatureReport.Gyroscope);
+
+		//USHORT dYaw = _byteswap_ushort(pInReport->Gyroscope); // sixaxis test
+		//// weird sixaxis needing rumble voltage to enable gyroscope
+		//if (dYaw < 10 || dYaw > 1013 || pDevCtx->GyroData.rumbleSettingForGyro == 0)
+		//{
+		//	pDevCtx->GyroData.rumbleSettingForGyro = 105; // some baseline value
+		//	DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
+		//	(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
+		//}
 	}
 	
 	battery = (DS_BATTERY_STATUS)pInReport->BatteryStatus;
@@ -1576,6 +1688,14 @@ DsBth_HidInterruptReadContinuousRequestCompleted(
 		pModCtx->GetFeatureReport.AccelerometerY = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerY);
 		pModCtx->GetFeatureReport.AccelerometerZ = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerZ);
 		pModCtx->GetFeatureReport.Gyroscope = _byteswap_ushort(pModCtx->GetFeatureReport.Gyroscope);
+
+		////// weird sixaxis needing rumble voltage to enable gyroscope
+		//if (pModCtx->GetFeatureReport.Gyroscope < 10 || pModCtx->GetFeatureReport.Gyroscope > 1013 || pDevCtx->GyroData.rumbleSettingForGyro == 0)
+		//{
+		//	pDevCtx->GyroData.rumbleSettingForGyro = 105; // some baseline value
+		//	DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
+		//	(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
+		//}
 	}
 
 	//

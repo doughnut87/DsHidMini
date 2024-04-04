@@ -93,6 +93,26 @@ namespace Nefarius.DsHidMini.MVVM
             set => _device.SetProperty(DsHidMiniDriver.WirelessIdleTimeoutPeriodMsProperty, value * 60000);
         }
 
+        public byte LargeRumbleDeadzone
+        {
+            get => _device.GetProperty<byte>(DsHidMiniDriver.LargeRumbleDeadzoneProperty);
+            set => _device.SetProperty(DsHidMiniDriver.LargeRumbleDeadzoneProperty, value);
+        }
+
+        public byte SmallRumbleThreshold
+        {
+            get => _device.GetProperty<byte>(DsHidMiniDriver.SmallRumbleThresholdProperty);
+            set => _device.SetProperty(DsHidMiniDriver.SmallRumbleThresholdProperty, value);
+        }
+
+        public byte SmallRumbleDiversion
+        {
+            get => _device.GetProperty<byte>(DsHidMiniDriver.SmallRumbleDiversionProperty);
+            set => _device.SetProperty(DsHidMiniDriver.SmallRumbleDiversionProperty, value);
+        }
+
+
+
         /// <summary>
         ///     The device Instance ID.
         /// </summary>

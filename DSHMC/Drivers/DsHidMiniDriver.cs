@@ -52,6 +52,18 @@ namespace Nefarius.DsHidMini.Drivers
             Guid.Parse("{6D293077-C3D6-4062-9597-BE4389404C02}"), 6,
             typeof(uint));
 
+        public static DevicePropertyKey LargeRumbleDeadzoneProperty => CustomDeviceProperty.CreateCustomDeviceProperty(
+            Guid.Parse("{6D293077-C3D6-4062-9597-BE4389404C02}"), 7,
+            typeof(byte));
+
+        public static DevicePropertyKey SmallRumbleThresholdProperty => CustomDeviceProperty.CreateCustomDeviceProperty(
+            Guid.Parse("{6D293077-C3D6-4062-9597-BE4389404C02}"), 8,
+            typeof(byte));
+
+        public static DevicePropertyKey SmallRumbleDiversionProperty => CustomDeviceProperty.CreateCustomDeviceProperty(
+            Guid.Parse("{6D293077-C3D6-4062-9597-BE4389404C02}"), 9,
+            typeof(byte));
+
         #endregion
 
         #region Hot-reload changeable properties

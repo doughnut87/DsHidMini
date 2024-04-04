@@ -59,6 +59,18 @@ DEFINE_DEVPROPKEY(DEVPKEY_DsHidMini_RW_IsOutputDeduplicatorEnabled,
 DEFINE_DEVPROPKEY(DEVPKEY_DsHidMini_RW_WirelessIdleTimeoutPeriodMs,
 	0x6d293077, 0xc3d6, 0x4062, 0x95, 0x97, 0xbe, 0x43, 0x89, 0x40, 0x4c, 0x2, 6); // DEVPROP_TYPE_UINT32
 
+// {6D293077-C3D6-4062-9597-BE4389404C02}
+DEFINE_DEVPROPKEY(DEVPKEY_DsHidMini_RW_LargeRumbleDeadzone,
+	0x6d293077, 0xc3d6, 0x4062, 0x95, 0x97, 0xbe, 0x43, 0x89, 0x40, 0x4c, 0x2, 7); // DEVPROP_TYPE_BYTE
+
+// {6D293077-C3D6-4062-9597-BE4389404C02}
+DEFINE_DEVPROPKEY(DEVPKEY_DsHidMini_RW_SmallRumbleThreshold,
+	0x6d293077, 0xc3d6, 0x4062, 0x95, 0x97, 0xbe, 0x43, 0x89, 0x40, 0x4c, 0x2, 8); // DEVPROP_TYPE_BYTE
+
+// {6D293077-C3D6-4062-9597-BE4389404C02}
+DEFINE_DEVPROPKEY(DEVPKEY_DsHidMini_RW_SmallRumbleDiversion,
+	0x6d293077, 0xc3d6, 0x4062, 0x95, 0x97, 0xbe, 0x43, 0x89, 0x40, 0x4c, 0x2, 9); // DEVPROP_TYPE_BYTE
+
 #pragma endregion
 
 #pragma region Hot-reload changeable properties

@@ -11,7 +11,7 @@
                        xmlns:ui="clr-namespace:Nefarius.DsHidMini.UI"
                        mc:Ignorable="d"
                        Title="DsHidMini Control"
-                       Height="620" Width="800"
+                       Height="720" Width="800"
                        ResizeMode="CanMinimize"
                        WindowStartupLocation="CenterScreen">
     <controls:AdonisWindow.TitleBarContent>

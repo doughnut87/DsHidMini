@@ -113,6 +113,41 @@ typedef struct _DS3_RAW_INPUT_REPORT
 
 } DS3_RAW_INPUT_REPORT, * PDS3_RAW_INPUT_REPORT;
 
+
+#define WINDOW_SIZE 10
+typedef struct _DS3_GYRO_DATA {
+	UCHAR frameCount;
+	USHORT timestamp; // microseconds*3/16
+	//double startTime;
+	USHORT yawOffset;
+	//double time;
+	LARGE_INTEGER lastTimeStamp;
+
+	double pitch, roll;       // calculated angles. Radians.
+	//double dPitch[WINDOW_SIZE], dRoll[WINDOW_SIZE];    // Angular velocty
+    //int Index;
+    //double dPitchSum, dRollSum;
+    //double max;
+	double dRollEst;
+	double dPitchEst;
+
+	// for sixaxis that apparently needs large rumble voltage to operate???
+	LARGE_INTEGER lastCalibStamp;
+	UCHAR rumbleSettingForGyro;
+	BOOL calibDone;
+
+
+	// emulation data more like.
+	UCHAR touchPacketCount;
+	BOOLEAN wasLeftTouch;
+	BOOLEAN wasRightTouch;
+	UCHAR leftTouchID; // max 0x7f
+	UCHAR rightTouchID; // max 0x7f
+	UCHAR currentTouchID; // max 0x7f
+
+
+} DS3_GYRO_DATA, * PDS3_GYRO_DATA;
+
 #include <poppack.h>
 
 /*

@@ -486,6 +486,20 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 	UCHAR Value
 )
 {
+    UCHAR adjustedValue = Value >= Context->Configuration.SmallRumbleThreshold ? Value > 0 ? 1 : 0 : 0;
+
+	// Only divert if small motor is not active
+	Context->DivertedRumble = adjustedValue > 0 ? 0 : (UCHAR)((USHORT)Value * (USHORT)Context->Configuration.SmallRumbleDiversion / ((SHORT)Context->Configuration.SmallRumbleThreshold - 1 > 0 ? Context->Configuration.SmallRumbleThreshold - 1 : 1));
+	if (Context->DivertedRumble == 0 && adjustedValue == 0 && Context->Configuration.SmallRumbleDiversion > 0 && Value > 0) // there should be some level of intensity yet the result was 0 so increment
+		Context->DivertedRumble++;
+	DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(Context);
+
+	// Do nothing
+	if (adjustedValue == Context->CurrentSmallRumble)
+		return;
+
+	Context->CurrentSmallRumble = adjustedValue;
+
 	switch (Context->ConnectionType)
 	{
 	case DsDeviceConnectionTypeUsb:
@@ -494,7 +508,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Value);
+			), Context->CurrentSmallRumble);
 		break;
 
 	case DsDeviceConnectionTypeBth:
@@ -503,7 +517,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Value);
+			), Context->CurrentSmallRumble);
 		break;
 	}
 }
@@ -540,6 +554,27 @@ VOID DS3_SET_LARGE_RUMBLE_STRENGTH(
 	UCHAR Value
 )
 {
+	Context->LargeRumble = Value;
+    DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(Context);
+}
+
+static VOID DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(
+	PDEVICE_CONTEXT Context
+)
+{
+	UCHAR adjustedValue = Context->LargeRumble > Context->DivertedRumble ? Context->LargeRumble : Context->DivertedRumble;
+
+	if (adjustedValue > 0)
+	    adjustedValue = (UCHAR)((((USHORT)adjustedValue) * (USHORT)(255-Context->Configuration.LargeRumbleDeadzone))/255 + Context->Configuration.LargeRumbleDeadzone/2);
+
+	if (Context->GyroData.rumbleSettingForGyro > 0)
+		adjustedValue = Context->GyroData.rumbleSettingForGyro;
+
+	//if (adjustedValue == Context->CurrentLargeRumble)
+	//	return;
+
+	Context->CurrentLargeRumble = adjustedValue;
+
 	switch (Context->ConnectionType)
 	{
 	case DsDeviceConnectionTypeUsb:
@@ -548,7 +583,7 @@ VOID DS3_SET_LARGE_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Value);
+			), Context->CurrentLargeRumble);
 		break;
 
 	case DsDeviceConnectionTypeBth:
@@ -557,7 +592,7 @@ VOID DS3_SET_LARGE_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Value);
+			), Context->CurrentLargeRumble);
 		break;
 	}
 }

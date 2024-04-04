@@ -1,7 +1,11 @@
+#include <math.h>
 #include "Driver.h"
 #include "DsHid.tmh"
 #ifdef DSHM_FEATURE_FFB
 #include "PID/PIDTypes.h"
+#endif
+#ifndef M_PI
+#    define M_PI 3.1415926535897932
 #endif
 
 #pragma region DS3 HID Report Descriptor (Split Device Mode)
@@ -519,12 +523,47 @@ UCHAR REVERSE_BITS(UCHAR x)
 	return x;
 }
 
+
+typedef struct timeval {
+	long tv_sec;
+	long tv_usec;
+} TIMEVAL, * PTIMEVAL, * LPTIMEVAL;
+
+/* FILETIME of Jan 1 1970 00:00:00. */
+static const unsigned __int64 epoch = ((unsigned __int64)116444736000000000ULL);
+
+/*
+ * timezone information is stored outside the kernel so tzp isn't used anymore.
+ *
+ * Note: this function is not for Win32 high precision timing purpose. See
+ * elapsed_time().
+ */
+int
+gettimeofday(struct timeval* tp, struct timezone* tzp)
+{
+	FILETIME    file_time;
+	SYSTEMTIME  system_time;
+	ULARGE_INTEGER ularge;
+
+	GetSystemTime(&system_time);
+	SystemTimeToFileTime(&system_time, &file_time);
+	ularge.LowPart = file_time.dwLowDateTime;
+	ularge.HighPart = file_time.dwHighDateTime;
+
+	tp->tv_sec = (long)((ularge.QuadPart - epoch) / 10000000L);
+	tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+
+	return 0;
+}
+
 VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 	_In_ PDS3_RAW_INPUT_REPORT Input,
 	_Out_ PUCHAR Output,
-	_In_ BOOLEAN IsWired
+	_In_ BOOLEAN IsWired, _Out_ PDS3_GYRO_DATA pGyroData, _In_ PVOID pContext
 )
 {
+	PDEVICE_CONTEXT pDevCtx = (PDEVICE_CONTEXT)pContext;
+
 	// Report ID
 	Output[0] = Input->ReportId;
 
@@ -539,6 +578,28 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 
 	// PS button
 	Output[7] &= ~0x01; // Clear button bit
+	Output[7] &= ~0x02; // Clear touchbutton bit
+	Output[7] &= ~0xFC; // Clear frameCount bits (upper 6)
+
+	//TimeStamp
+	Output[10] &= ~0xFF;
+	Output[11] &= ~0xFF;
+
+	//Sixaxis - Gyro - dunno
+	Output[13] &= ~0xFF;
+	Output[14] &= ~0xFF;
+	Output[15] &= ~0xFF;
+	Output[16] &= ~0xFF;
+	Output[17] &= ~0xFF;
+	Output[18] &= ~0xFF;
+
+	//Sixaxis - Acel
+	Output[19] &= ~0xFF; //lower 8bits accel x
+	Output[20] &= ~0xFF; //uppper 8 bits accel x
+	Output[21] &= ~0xFF; // accel y
+	Output[22] &= ~0xFF;
+	Output[23] &= ~0xFF; // accel z
+	Output[24] &= ~0xFF;
 
 	// Battery + cable info
 	Output[30] &= ~0xF; // Clear lower 4 bits
@@ -550,6 +611,22 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 	// Finger 2 touchpad contact info
 	Output[39] |= 0x80; // Set top bit to disable finger contact
 	Output[48] |= 0x80; // Set top bit to disable finger contact
+
+	Output[33] &= ~0xFF;
+	Output[34] &= ~0xFF;
+
+	Output[35] &= ~0x7F; // Clear ID
+
+	Output[36] &= ~0xFF;
+	Output[37] &= ~0xFF;
+	Output[38] &= ~0xFF;
+
+	Output[39] &= ~0x7F; // Clear ID
+
+	Output[40] &= ~0xFF;
+	Output[41] &= ~0xFF;
+	Output[42] &= ~0xFF;
+
 
 	// Translate D-Pad to HAT format
 	switch (Input->Buttons.bButtons[0] & ~0xF)
@@ -625,7 +702,7 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 		switch ((DS_BATTERY_STATUS)Input->BatteryStatus)
 		{
 		case DsBatteryStatusCharging:
-			Output[30] |= 4; // 36%
+			Output[30] |= 0; // 36%
 			break;
 		case DsBatteryStatusCharged:
 		case DsBatteryStatusFull:
@@ -657,6 +734,341 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 			Output[30] |= 1; // 12%
 			break;
 		}
+	}
+
+	//Sixaxis translation
+	UCHAR alt = 0xFF; //alt read mode;
+
+	//magnitude seems to be a lot less in ds4 land.
+	if (alt> 0)
+	{
+
+		USHORT ddX = 0x03FF - _byteswap_ushort(Input->AccelerometerX);
+		USHORT ddY = _byteswap_ushort(Input->AccelerometerY);
+		USHORT ddZ = _byteswap_ushort(Input->AccelerometerZ);
+		USHORT dYaw = _byteswap_ushort(Input->Gyroscope); // sixaxis test
+
+		// Sensors range 0 - 1023. Zero at 512
+        const int a0 = 512;
+
+		//testing sixaxis
+		//pGyroData->yawOffset = 0;// (USHORT)a0;
+		//int gVal = 1023 - (int)dYaw;
+
+		////clamp
+		//if (gVal < 0)
+		//	gVal = 0;
+		//else if (gVal > 1023)
+		//	gVal = 1023;
+
+		//dYaw = (USHORT)gVal;
+		int gyroOffset = pGyroData->yawOffset == 0 ? a0 : pGyroData->yawOffset;
+
+		int AccelX = -(int)((double)((int)ddX - a0)/113.0 * 8192.0);
+		int AccelY = -(int)((double)((int)ddY - a0)/113.0 * 8192.0);
+		int AccelZ = -(int)((double)((int)ddZ - a0)/113.0 * 8192.0);
+		int Gyro = (int)((double)((int)dYaw - gyroOffset ) / 123.0 * 90.0 * 16.0);
+
+		//if (pGyroData->yawOffset == 0){
+		//	Gyro = 0;
+		//}
+
+		//clamp
+		if (AccelX > SHRT_MAX)
+			AccelX = SHRT_MAX;
+		if (AccelX < SHRT_MIN)
+			AccelX = SHRT_MIN;
+
+		if (AccelY > SHRT_MAX)
+			AccelY = SHRT_MAX;
+		if (AccelY < SHRT_MIN)
+			AccelY = SHRT_MIN;
+
+		if (AccelZ > SHRT_MAX)
+			AccelZ = SHRT_MAX;
+		if (AccelZ < SHRT_MIN)
+			AccelZ = SHRT_MIN;
+
+		if (Gyro > SHRT_MAX)
+			Gyro = SHRT_MAX;
+		if (Gyro < SHRT_MIN)
+			Gyro = SHRT_MIN;
+
+
+		Output[19] |= (UCHAR)((SHORT)AccelX & 0xFF);
+		Output[20] |= (UCHAR)((SHORT)AccelX >> 8);
+
+		// 'height' appears to be y-axis on ds4, so swap them around.
+		//z-axis is inverted.
+		Output[23] |= (UCHAR)((SHORT)AccelY & 0xFF);
+		Output[24] |= (UCHAR)((SHORT)AccelY >> 8);
+
+		//y-axis is inverted.
+		Output[21] |= (UCHAR)((SHORT)AccelZ & 0xFF);
+		Output[22] |= (UCHAR)((SHORT)AccelZ >> 8);
+
+		//yaw
+		Output[15] |= (UCHAR)((SHORT)Gyro & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[16] |= (UCHAR)((SHORT)Gyro >> 8);
+
+		//pitch and roll angular velocity
+		//double roll = atan2(-((int)ddX - a0), -((int)ddZ - a0));
+
+		//https://www.nxp.com/files-static/sensors/doc/app_note/AN3461.pdf, eqn 37, 38
+		const double mu = 0.01;
+		double azyMu = sqrt(pow((int)ddZ - a0, 2) + mu*pow((int)ddY - a0,2));
+		azyMu = -((int)ddZ - a0) > 0 ? azyMu : -azyMu; //sign factor
+
+		double roll = atan2(-((int)ddX - a0), azyMu);
+
+		double azx = hypot((int)ddX - a0, (int)ddZ - a0);
+		double pitch = atan2(((int)ddY - a0), azx);
+
+		//struct timeval tv;
+		//gettimeofday(&tv, NULL);
+		//double now = tv.tv_sec + tv.tv_usec * 1e-6;
+		LARGE_INTEGER now;
+		LARGE_INTEGER freq;
+		QueryPerformanceFrequency(&freq);
+		QueryPerformanceCounter(&now);
+
+		//if (!pGyroData->time)
+		//{
+		//	//pGyroData->startTime = now;
+		//	pGyroData->time = now;
+		//	pGyroData->pitch = pitch;
+		//	pGyroData->roll = roll;
+		//}
+
+		if (pGyroData->lastTimeStamp.QuadPart == 0)
+        {
+			//pGyroData->lastTimeStamp = now;
+			pGyroData->lastTimeStamp = now;
+            pGyroData->pitch = pitch;
+            pGyroData->roll = roll;
+        }
+
+
+		//double dt = now - pGyroData->time;
+		double dt = (double)(now.QuadPart - pGyroData->lastTimeStamp.QuadPart) / (double)freq.QuadPart;
+		
+		double dPitch = dt > 0 ? (pitch - pGyroData->pitch) / dt : 0;
+		double deltaRoll = (roll - pGyroData->roll);
+		
+		//QueryPerformanceCounter(&pGyroData->lastTimeStamp);
+		pGyroData->lastTimeStamp = now;
+		pGyroData->pitch = pitch;
+		pGyroData->roll = roll;
+
+		//pGyroData->timestamp += (dt * 25000);
+		pGyroData->timestamp += (USHORT)(dt /*seconds*/ * 1000000 /*mu s*/ * 3u /*typical ms delta*/ / 16u /*typical value delta */);
+
+		//180 -> -180 vice versa
+		if (deltaRoll > (1.5 * M_PI))
+			deltaRoll -= (2.0 * M_PI);
+		if (deltaRoll < -(1.5 * M_PI))
+			deltaRoll += (2.0 * M_PI);
+
+		double dRoll = dt > 0 ? deltaRoll / dt : 0;
+
+		//pGyroData->dPitchSum = pGyroData->dPitchSum - pGyroData->dPitch[pGyroData->Index];       // Remove the oldest entry from the sum
+		//pGyroData->dRollSum = pGyroData->dRollSum - pGyroData->dRoll[pGyroData->Index];       // Remove the oldest entry from the sum
+
+		//pGyroData->dPitch[pGyroData->Index] = dPitch;           // Add the newest reading to the window
+		//pGyroData->dRoll[pGyroData->Index] = dRoll;           // Add the newest reading to the window
+		//pGyroData->dPitchSum = pGyroData->dPitchSum + dPitch;                 // Add the newest reading to the sum
+		//pGyroData->dRollSum = pGyroData->dRollSum + dRoll;                 // Add the newest reading to the sum
+
+		//pGyroData->Index = (pGyroData->Index + 1) % WINDOW_SIZE;   // Increment the index, and wrap to 0 if it exceeds the window size
+
+		//double avgRoll = pGyroData->dRollSum / WINDOW_SIZE;      // Divide the sum of the window by the window size for the result
+		//double avgPitch = pGyroData->dPitchSum / WINDOW_SIZE;      // Divide the sum of the window by the window size for the result
+
+		// Exponential weight de-noise
+		// yn = w × xn + (1 – w) × yn – 1
+		double const weight = 0.1;
+		pGyroData->dRollEst = weight * dRoll + (1.0 - weight) * pGyroData->dRollEst;
+		pGyroData->dPitchEst = weight * dPitch + (1.0 - weight) * pGyroData->dPitchEst;
+		// moving average de-noise
+		//pGyroData->dPitchEst = (pGyroData->dPitchEst * (double)(WINDOW_SIZE - 1) + dPitch) / (double)WINDOW_SIZE;
+		//pGyroData->dRollEst = (pGyroData->dRollEst * (double)(WINDOW_SIZE - 1) + dRoll) / (double)WINDOW_SIZE;
+		
+		//SHORT vRoll = (SHORT)(avgRoll / M_PI * 180 * 16);//SHORT_MAX);
+		SHORT vRoll = (SHORT)(pGyroData->dRollEst / M_PI * 180 * 16);//SHORT_MAX);
+		SHORT vPitch = (SHORT)(pGyroData->dPitchEst / M_PI * 180 * 16); //SHORT_MAX);
+
+		SHORT sRoll = (SHORT)(roll / M_PI * 180 * 16);
+		SHORT sPitch = (SHORT)(pitch / M_PI * 180 * 16);
+
+
+
+		//clamp
+		if (vPitch > SHRT_MAX)
+			vPitch = SHRT_MAX;
+		if (vPitch < SHRT_MIN)
+			vPitch = SHRT_MIN;
+
+		if (vRoll > SHRT_MAX)
+			vRoll = SHRT_MAX;
+		if (vRoll < SHRT_MIN)
+			vRoll = SHRT_MIN;
+
+		//init yaw when 'pitch' and 'roll' has settled
+		if (pGyroData->yawOffset == 0 && pGyroData->calibDone == TRUE && abs(vPitch) <= 16 && abs(vRoll) <= 16 && (dt >= 0.000001))
+		{
+			// weird sixaxis needing rumble voltage
+			//if (dYaw < 10 || pGyroData->rumbleSettingForGyro != 0)
+			//{
+			//	const USHORT deadzone = 25;
+
+			//    if (dYaw < (512 - deadzone))
+			//    {
+			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 150)
+			//		{
+			//			pGyroData->rumbleSettingForGyro++;
+			//			if (dYaw < 10)
+			//			{
+			//				pGyroData->rumbleSettingForGyro = 105; // some baseline value
+			//			}
+			//			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pGyroData->rumbleSettingForGyro);
+			//	        (void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
+			//			pGyroData->lastCalibStamp = now;
+			//		}
+			//		
+			//	}
+			//	else if (dYaw > (512 + deadzone))
+			//	{
+			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 150)
+			//		{
+			//			pGyroData->rumbleSettingForGyro--;
+			//			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pGyroData->rumbleSettingForGyro);
+			//			(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
+			//			pGyroData->lastCalibStamp = now;
+			//		}
+			//	}
+			//	else 
+			//	{
+			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 100)
+			//		{
+			//			pGyroData->yawOffset = dYaw;
+			//		}
+			//	}
+			//}
+			//else
+			    pGyroData->yawOffset = dYaw;
+		}
+		
+		//pitch
+		Output[13] |= (UCHAR)(vPitch & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[14] |= (UCHAR)(vPitch >> 8);
+
+		//roll
+		Output[17] |= (UCHAR)(vRoll & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[18] |= (UCHAR)(vRoll >> 8);
+
+		//timestamp
+		Output[10] |= (UCHAR)((USHORT)pGyroData->timestamp & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[11] |= (UCHAR)((USHORT)pGyroData->timestamp >> 8);
+
+		//FrameCount
+		pGyroData->frameCount = ++pGyroData->frameCount % 64;
+		Output[7] |= (UCHAR)(pGyroData->frameCount << 2);
+	}
+
+	//TouchPad emulation
+
+	// PS button and trigger pressure detected, enable tp emulation until triggers released
+	if ((Input->Buttons.Individual.PS || pGyroData->wasLeftTouch == TRUE || pGyroData->wasRightTouch == TRUE) && (Input->Pressure.Values.L2 > 0 || Input->Pressure.Values.R2 > 0))
+	{
+		//override ps and triggers
+		Output[7] &= ~Input->Buttons.Individual.PS;
+
+		//L2, R2
+		Output[6] &= ~(((Input->Buttons.bButtons[1] >> 0) & 0x01) << 2);
+		Output[6] &= ~(((Input->Buttons.bButtons[1] >> 1) & 0x01) << 3);
+
+		// Trigger axes
+		Output[8] = 0;
+		Output[9] = 0;
+
+		// tp click if pressure past a certain point
+		if ((Input->Pressure.Values.L2 > 240 || Input->Pressure.Values.R2 > 240))
+		    Output[7] |= (0x1 << 1);
+
+		//stick offsets?
+		//
+		++pGyroData->touchPacketCount;
+		Output[33] = 1; //single packet
+		Output[34] = pGyroData->touchPacketCount;
+		
+		//finger 1 data
+		if (Input->Pressure.Values.L2 > 0)
+		{
+			if (pGyroData->wasLeftTouch == FALSE)
+			{
+				//pGyroData->currentTouchID = ++pGyroData->currentTouchID % 0x7f;
+				pGyroData->leftTouchID = ++pGyroData->leftTouchID % 0x80;
+			}
+			pGyroData->wasLeftTouch = TRUE;
+			Output[35] &= ~0x80; // unset to be on.
+			Output[35] |= pGyroData->leftTouchID;
+			/*
+			 *        public const int RESOLUTION_X_MAX = 1920;
+        public const int RESOLUTION_Y_MAX = 942;
+			 *
+			 */
+		    // set touch x [36] plus lower [37] y high [37] and [38]
+
+			USHORT xleft = (1920 - 1920 * Input->Pressure.Values.L2 / 255) / 2;
+			USHORT yleft = 942 / 2;
+
+			Output[36] |= (UCHAR)(xleft & 0xFF);
+			Output[37] |= (UCHAR)((xleft >> 8) & 0x0F);
+			Output[37] |= (UCHAR)((yleft << 4) & 0xF0);
+			Output[38] |= (UCHAR)((yleft >> 4) & 0xFF);
+		}
+		else
+		{
+			pGyroData->wasLeftTouch = FALSE;
+		}
+
+
+		//finger 2 data
+		if (Input->Pressure.Values.R2 > 0)
+		{
+			if (pGyroData->wasRightTouch == FALSE)
+			{
+				//pGyroData->currentTouchID = ++pGyroData->currentTouchID % 0x80;
+				pGyroData->rightTouchID = pGyroData->rightTouchID % 0x80;
+			}
+			pGyroData->wasRightTouch = TRUE;
+			Output[39] &= ~0x80; // unset to be on.
+			Output[39] |= pGyroData->rightTouchID;
+			/*
+ *        public const int RESOLUTION_X_MAX = 1920;
+public const int RESOLUTION_Y_MAX = 942;
+	 *
+	 */
+			USHORT xright = 960 + 1920 * Input->Pressure.Values.R2 / 255 / 2;
+			USHORT yright = 942 / 2;
+			// set touch x [40] plus lower [41] y high [41] and [42]
+			Output[40] |= (UCHAR)(xright & 0xFF);
+			Output[41] |= (UCHAR)((xright >> 8) & 0x0F);
+			Output[41] |= (UCHAR)((yright << 4) & 0xF0);
+			Output[42] |= (UCHAR)((yright >> 4) & 0xFF);
+		}
+		else
+		{
+			pGyroData->wasRightTouch = FALSE;
+		}
+	}
+	else
+	{
+		pGyroData->wasLeftTouch = FALSE;
+		pGyroData->wasRightTouch = FALSE;
 	}
 }
 

@@ -25,4 +25,19 @@ namespace Nefarius.DsHidMini.Util.WPF
             throw new NotImplementedException();
         }
     }
+
+    public class ByteToPercentConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var byteValue = value is byte b ? b : (byte)0;
+
+            return (int)((double)byteValue * 100/255.0);
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }

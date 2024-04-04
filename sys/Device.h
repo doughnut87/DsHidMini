@@ -287,6 +287,16 @@ typedef struct _DEVICE_CONTEXT
 	//
 	HANDLE ConfigurationReloadWaitHandle;
 
+    /// <summary>
+    /// Rumble varying rumble intensity that is diveted from small to large
+    /// </summary>
+    UCHAR DivertedRumble;
+    UCHAR LargeRumble;
+
+	UCHAR CurrentSmallRumble;
+	UCHAR CurrentLargeRumble;
+
+    DS3_GYRO_DATA GyroData;
 } DEVICE_CONTEXT, * PDEVICE_CONTEXT;
 
 //

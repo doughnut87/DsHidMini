@@ -161,6 +161,15 @@ typedef struct _DS_DRIVER_CONFIGURATION
 
     /** Idle disconnect period in milliseconds */
     ULONG WirelessIdleTimeoutPeriodMs;
+
+    /** Idle disconnect period in milliseconds */
+    UCHAR LargeRumbleDeadzone;
+
+    /** Idle disconnect period in milliseconds */
+    UCHAR SmallRumbleThreshold;
+
+    /** Idle disconnect period in milliseconds */
+    UCHAR SmallRumbleDiversion;
 	
 } DS_DRIVER_CONFIGURATION, * PDS_DRIVER_CONFIGURATION;
 
