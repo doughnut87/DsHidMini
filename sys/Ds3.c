@@ -486,7 +486,22 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 	UCHAR Value
 )
 {
-    UCHAR adjustedValue = Value >= Context->Configuration.SmallRumbleThreshold ? Value > 0 ? 1 : 0 : 0;
+	UCHAR adjustedValue = Value >= Context->Configuration.SmallRumbleThreshold ? Value > 0 ? 1 : 0 : 0;
+
+	//inteporlator
+	if (!adjustedValue && Context->Configuration.SmallRumbleDiversion == 0 && Value != 0 && Value != 255)
+	{
+
+		if (!Context->OutputReport.Cache.IsRumbleInterpolatorStarted)
+			Context->OutputReport.Cache.IsRumbleInterpolatorStarted = WdfTimerStart(Context->OutputReport.Cache.RumbleInterpolatorTimer, WDF_REL_TIMEOUT_IN_MS(1));
+		Context->SmallRumble = Value;
+		return;
+	}
+	else
+	{
+		WdfTimerStop(Context->OutputReport.Cache.RumbleInterpolatorTimer, FALSE);
+		Context->OutputReport.Cache.IsRumbleInterpolatorStarted = FALSE;
+	}
 
 	// Only divert if small motor is not active
 	Context->DivertedRumble = adjustedValue > 0 ? 0 : (UCHAR)((USHORT)Value * (USHORT)Context->Configuration.SmallRumbleDiversion / ((SHORT)Context->Configuration.SmallRumbleThreshold - 1 > 0 ? Context->Configuration.SmallRumbleThreshold - 1 : 1));
@@ -500,6 +515,14 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 
 	Context->CurrentSmallRumble = adjustedValue;
 
+	DS3_SET_SMALL_RUMBLE_STRENGTH_Impl(Context, Context->CurrentSmallRumble);
+}
+
+VOID DS3_SET_SMALL_RUMBLE_STRENGTH_Impl(
+	PDEVICE_CONTEXT Context,
+	UCHAR Value
+)
+{
 	switch (Context->ConnectionType)
 	{
 	case DsDeviceConnectionTypeUsb:
@@ -508,7 +531,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Context->CurrentSmallRumble);
+			), Value > 0 ? TRUE : FALSE);
 		break;
 
 	case DsDeviceConnectionTypeBth:
@@ -517,7 +540,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 			(PUCHAR)WdfMemoryGetBuffer(
 				Context->OutputReportMemory,
 				NULL
-			), Context->CurrentSmallRumble);
+			), Value > 0 ? TRUE : FALSE);
 		break;
 	}
 }

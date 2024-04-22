@@ -1391,7 +1391,6 @@ void Ds_ProcessHidInputReport(PDEVICE_CONTEXT Context, PDS3_RAW_INPUT_REPORT Rep
                 }
             }
         }
-			
 
 		//
 		// Notify new Input Report is available
@@ -2248,6 +2247,36 @@ DSHM_OutputReportDelayTimerElapsed(
 	WdfWaitLockRelease(pDevCtx->OutputReport.Cache.Lock);
 
 	FuncExitNoReturn(TRACE_DSHIDMINIDRV);
+}
+
+//
+// Callback invoked while small rumble is set between 1-254.
+// 
+void
+DSHM_OutputReportRumbleInterpolatorElapsed(
+	WDFTIMER Timer
+)
+{
+	WDFDEVICE device = WdfTimerGetParentObject(Timer);
+	PDEVICE_CONTEXT pDevCtx = DeviceGetContext(device);
+
+	UCHAR adjusted = pDevCtx->SmallRumble >> 5;
+
+	if (pDevCtx->SmallRumbleCounter >= 8)
+	{
+		pDevCtx->SmallRumbleCounter -= 8;
+	}
+	else
+	{
+		pDevCtx->SmallRumbleCounter += (1 << adjusted);
+	}
+	UCHAR newValue = pDevCtx->SmallRumbleCounter >= 8;
+	if (newValue == pDevCtx->CurrentSmallRumble)
+		return;
+
+	pDevCtx->CurrentSmallRumble = newValue;
+	DS3_SET_SMALL_RUMBLE_STRENGTH_Impl(pDevCtx, pDevCtx->CurrentSmallRumble);
+	Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
 }
 
 //

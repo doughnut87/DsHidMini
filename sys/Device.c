@@ -765,6 +765,34 @@ DsDevice_InitContext(
 			);
 			break;
 		}
+
+		//
+		// RumbleInterpolator
+		// 
+
+		WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+		attributes.ParentObject = Device;
+
+		WDF_TIMER_CONFIG_INIT_PERIODIC(
+			&timerCfg,
+			DSHM_OutputReportRumbleInterpolatorElapsed,
+			1 // limited by system timer resolution so smallest is actually 16ms
+		);
+
+		status = WdfTimerCreate(
+			&timerCfg,
+			&attributes,
+			&pDevCtx->OutputReport.Cache.RumbleInterpolatorTimer
+		);
+		if (!NT_SUCCESS(status))
+		{
+			TraceError(
+				TRACE_DEVICE,
+				"WdfTimerCreate (Rumble interpolator) failed with status %!STATUS!",
+				status
+			);
+			break;
+		}
 	}
 	while (FALSE);
 	

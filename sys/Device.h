@@ -151,6 +151,16 @@ typedef struct _DS_OUTPUT_REPORT_CACHE
 	WDFTIMER SendDelayTimer;
 
 	//
+	// Small rumble interpolator timer
+	// 
+	WDFTIMER RumbleInterpolatorTimer;
+
+	//
+	// TRUE if the timer is running
+	// 
+	BOOLEAN IsRumbleInterpolatorStarted;
+
+	//
 	// Pending packet buffer to send
 	// 
 	PVOID PendingClientBuffer;
@@ -296,6 +306,9 @@ typedef struct _DEVICE_CONTEXT
 	UCHAR CurrentSmallRumble;
 	UCHAR CurrentLargeRumble;
 
+	UCHAR SmallRumble;
+	UCHAR SmallRumbleCounter;
+
     DS3_GYRO_DATA GyroData;
 } DEVICE_CONTEXT, * PDEVICE_CONTEXT;
 
@@ -370,6 +383,8 @@ DMF_DsHidMini_Close(
 EVT_DMF_ThreadedBufferQueue_Callback DMF_EvtExecuteOutputPacketReceived;
 
 EVT_WDF_TIMER DSHM_OutputReportDelayTimerElapsed;
+
+EVT_WDF_TIMER DSHM_OutputReportRumbleInterpolatorElapsed;
 
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL DSHM_EvtWdfIoQueueIoDeviceControl;
 
