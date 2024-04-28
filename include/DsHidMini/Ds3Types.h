@@ -119,10 +119,12 @@ typedef struct _DS3_GYRO_DATA {
 	UCHAR frameCount;
 	USHORT timestamp; // microseconds*3/16
 	//double startTime;
-	USHORT yawOffset;
+	USHORT yawZero; // calibrate the input report for yaw.
+	USHORT yawLast;
 	//double time;
 	LARGE_INTEGER lastTimeStamp;
 
+	// emulated values for ds4 compatibility.
 	double pitch, roll;       // calculated angles. Radians.
 	//double dPitch[WINDOW_SIZE], dRoll[WINDOW_SIZE];    // Angular velocty
     //int Index;
@@ -131,10 +133,14 @@ typedef struct _DS3_GYRO_DATA {
 	double dRollEst;
 	double dPitchEst;
 
-	// for sixaxis that apparently needs large rumble voltage to operate???
+	// These are to initialize the calibration for gyro on the output report.
+	// For sixaxis this is applied to 'large rumble' bytes
+	// for some ds3 models, this used on the output report bytes immediately after large rumble.
 	LARGE_INTEGER lastCalibStamp;
-	UCHAR rumbleSettingForGyro;
-	BOOL calibDone;
+	UCHAR calibSettingForGyro;
+	BOOL calibOutputDone;
+	BOOL calibInputDone;
+	UCHAR calibModel;
 
 
 	// emulation data more like.

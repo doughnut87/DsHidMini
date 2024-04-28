@@ -4,7 +4,6 @@
 #include <DmfModule.h>
 #include <devpkey.h>
 
-
 EVT_DMF_DEVICE_MODULES_ADD DmfDeviceModulesAdd;
 
 #pragma code_seg("PAGED")
@@ -378,12 +377,108 @@ NTSTATUS DsDevice_ReadProperties(WDFDEVICE Device)
 			DsDevice_RegisterBthDisconnectListener(pDevCtx);
 			
 			DsDevice_RegisterHotReloadListener(pDevCtx);
+
+
+			// TODO: Figure out how to attach device info to bth
+			//WDF_DEVICE_PROPERTY_DATA_INIT(&devProp, &DEVPKEY_DsHidMini_RO_IdentificationData);
+			//devProp.Flags |= PLUGPLAY_PROPERTY_PERSISTENT;
+			//devProp.Lcid = LOCALE_NEUTRAL;
+			//UCHAR identification[64];
+
+			//status = WdfDeviceQueryPropertyEx(
+			//	Device,
+			//	&devProp,
+			//	ARRAYSIZE(identification),
+			//	&identification,
+			//	&requiredSize,
+			//	&propType
+			//);
+			//if (NT_SUCCESS(status))
+			//{
+			//	UpdateDeviceModel(pDevCtx, identification);
+			//}
+			pDevCtx->GyroData.calibModel |= 0x4; // guessing mode
 		}
 	} while (FALSE);
 
 	FuncExit(TRACE_DEVICE, "status=%!STATUS!", status);
 	
 	return status;
+}
+
+void UpdateDeviceModel(PDEVICE_CONTEXT pDevCtx, UCHAR identification[64])
+{
+	// logic taken from rajkosto/scptoolkit
+	pDevCtx->GyroData.calibOutputDone = TRUE;
+	UCHAR calibModel = 0;
+
+	if ((identification[8] == 0x18 && identification[9] == 0x18 && identification[10] == 0x18 && identification[11] == 0x18) ||
+		(identification[8] == 0x17 && identification[9] == 0x17 && identification[10] == 0x17 && identification[11] == 0x17))
+	{
+		calibModel |= 0x8; // Got Identification of sorts?
+	}
+	// check for sixaxis
+	const int idxCalibBytes = 0x26;
+	if ((identification[idxCalibBytes + 0] != 1 || identification[idxCalibBytes + 1] != 2) &&
+		(identification[idxCalibBytes + 1] != 1 || identification[idxCalibBytes + 2] != 2))
+	{
+		calibModel |= 0x1; //sixaxis ?
+	}
+	else
+	{
+		calibModel |= 0x10; //A DualShock?
+	}
+	int numCalibFields = identification[idxCalibBytes - 1];
+	for (int i = 0; i < numCalibFields; i++)
+	{
+		int bufIdx = i + idxCalibBytes;
+		if (bufIdx >= 49) //dont go outside buffer bounds
+			break;
+
+		if (identification[bufIdx] == 7)
+		{
+			calibModel |= (0x10 | 0x20); // A certain Model of DS3?
+			break;
+		}
+	}
+
+	// CECHZC2J - also needs to invert. need more samples to determine which model dont need gyro inversion?
+	// This model also appears to not require gyro calibration adjustments on the output report.
+	if ((calibModel & 0x10) != 0 && numCalibFields == 2)
+	{
+		calibModel |= 0x2;
+	}
+
+	pDevCtx->GyroData.calibSettingForGyro = 0;
+	pDevCtx->GyroData.yawZero = 0;
+	pDevCtx->GyroData.calibModel = calibModel;
+	pDevCtx->GyroData.calibOutputDone = FALSE;
+
+	//FILE* file;
+	//errno_t err = fopen_s(&file, "d:\\development\\dshidmini.txt", "a");
+
+	//if (file != NULL) {
+	//	// Get the current time
+	//	time_t rawtime;
+	//	struct tm timeinfo;
+	//	char buffer[80];
+
+	//	time(&rawtime);
+	//	err = localtime_s(&timeinfo, &rawtime);
+
+	//	// Format the current time
+	//	strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+
+	//	fprintf(file, "%s Update Device:\n", buffer);
+	//	// Write the variables to the file
+	//	fprintf(file, "calibModel: %d\n", pDevCtx->GyroData.calibModel);
+	//	fprintf(file, "yawOffset: %d\n", pDevCtx->GyroData.yawOffset);
+	//	fprintf(file, "calibSettingForGyro: %d\n", pDevCtx->GyroData.calibSettingForGyro);
+	//	fprintf(file, "calibDone: %d\n", pDevCtx->GyroData.calibDone);
+
+	//	// Close the file
+	//	fclose(file);
+	//}
 }
 
 //
@@ -453,7 +548,6 @@ VOID DsDevice_ReadConfiguration(WDFDEVICE Device)
 
 	TraceVerbose(TRACE_DEVICE, "[COM] HidDeviceMode: 0x%02X",
 		pDevCtx->Configuration.HidDeviceMode);
-
 	
 	WDF_DEVICE_PROPERTY_DATA_INIT(&propertyData, &DEVPKEY_DsHidMini_RW_IsOutputRateControlEnabled);
 
@@ -776,7 +870,7 @@ DsDevice_InitContext(
 		WDF_TIMER_CONFIG_INIT_PERIODIC(
 			&timerCfg,
 			DSHM_OutputReportRumbleInterpolatorElapsed,
-			1 // limited by system timer resolution so smallest is actually 16ms
+			pDevCtx->ConnectionType == DsDeviceConnectionTypeBth ? 150 : 1 // limited by system timer resolution so smallest is actually 16ms
 		);
 
 		status = WdfTimerCreate(
@@ -793,6 +887,36 @@ DsDevice_InitContext(
 			);
 			break;
 		}
+
+		//
+		// Gyro Output Calibrator
+		// 
+
+		WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+		attributes.ParentObject = Device;
+
+		WDF_TIMER_CONFIG_INIT_PERIODIC(
+			&timerCfg,
+			DSHM_OutputReportGyroCalibrationElapsed,
+			60000 // limited by system timer resolution so smallest is actually 16ms
+		);
+
+		status = WdfTimerCreate(
+			&timerCfg,
+			&attributes,
+			&pDevCtx->OutputReport.Cache.GyroOutputCalibrationTimer
+		);
+		if (!NT_SUCCESS(status))
+		{
+			TraceError(
+				TRACE_DEVICE,
+				"WdfTimerCreate (Gyro Calibration) failed with status %!STATUS!",
+				status
+			);
+			break;
+		}
+
+		WdfTimerStart(pDevCtx->OutputReport.Cache.GyroOutputCalibrationTimer, WDF_REL_TIMEOUT_IN_MS(60000));
 	}
 	while (FALSE);
 	

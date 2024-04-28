@@ -746,7 +746,15 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 		USHORT ddX = 0x03FF - _byteswap_ushort(Input->AccelerometerX);
 		USHORT ddY = _byteswap_ushort(Input->AccelerometerY);
 		USHORT ddZ = _byteswap_ushort(Input->AccelerometerZ);
-		USHORT dYaw = _byteswap_ushort(Input->Gyroscope); // sixaxis test
+		USHORT dYaw = _byteswap_ushort(Input->Gyroscope); 
+
+		if ((pDevCtx->GyroData.calibModel & 0x4) == 0 &&
+			(pDevCtx->GyroData.calibModel & 0x20) == 0 && 
+			(pDevCtx->GyroData.calibModel & 0x1) == 0 && 
+			(pDevCtx->GyroData.calibModel & 0x2) == 0)
+		{
+			dYaw = 0x03FF - dYaw;
+		}
 
 		// Sensors range 0 - 1023. Zero at 512
         const int a0 = 512;
@@ -762,7 +770,7 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 		//	gVal = 1023;
 
 		//dYaw = (USHORT)gVal;
-		int gyroOffset = pGyroData->yawOffset == 0 ? a0 : pGyroData->yawOffset;
+		int gyroOffset = pGyroData->yawZero == 0 ? a0 : pGyroData->yawZero;
 
 		int AccelX = -(int)((double)((int)ddX - a0)/113.0 * 8192.0);
 		int AccelY = -(int)((double)((int)ddY - a0)/113.0 * 8192.0);
@@ -914,63 +922,22 @@ VOID DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 			vRoll = SHRT_MIN;
 
 		//init yaw when 'pitch' and 'roll' has settled
-		if (pGyroData->yawOffset == 0 && pGyroData->calibDone == TRUE && abs(vPitch) <= 16 && abs(vRoll) <= 16 && (dt >= 0.000001))
+		if (pGyroData->calibInputDone == FALSE && pGyroData->calibOutputDone == TRUE && abs(vPitch) <= 16 && abs(vRoll) <= 16 && (dt >= 0.000001))
 		{
-			// weird sixaxis needing rumble voltage
-			//if (dYaw < 10 || pGyroData->rumbleSettingForGyro != 0)
-			//{
-			//	const USHORT deadzone = 25;
-
-			//    if (dYaw < (512 - deadzone))
-			//    {
-			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 150)
-			//		{
-			//			pGyroData->rumbleSettingForGyro++;
-			//			if (dYaw < 10)
-			//			{
-			//				pGyroData->rumbleSettingForGyro = 105; // some baseline value
-			//			}
-			//			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pGyroData->rumbleSettingForGyro);
-			//	        (void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
-			//			pGyroData->lastCalibStamp = now;
-			//		}
-			//		
-			//	}
-			//	else if (dYaw > (512 + deadzone))
-			//	{
-			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 150)
-			//		{
-			//			pGyroData->rumbleSettingForGyro--;
-			//			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pGyroData->rumbleSettingForGyro);
-			//			(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
-			//			pGyroData->lastCalibStamp = now;
-			//		}
-			//	}
-			//	else 
-			//	{
-			//		LONGLONG ms = (now.QuadPart - pGyroData->lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-			//		if (pGyroData->lastCalibStamp.QuadPart == 0 || ms > 100)
-			//		{
-			//			pGyroData->yawOffset = dYaw;
-			//		}
-			//	}
-			//}
-			//else
-			    pGyroData->yawOffset = dYaw;
+		    pGyroData->yawZero = dYaw;
+			pGyroData->calibInputDone = TRUE;
 		}
 		
 		//pitch
-		Output[13] |= (UCHAR)(vPitch & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[13] |= (UCHAR)(vPitch & 0xFF);
 		Output[14] |= (UCHAR)(vPitch >> 8);
 
 		//roll
-		Output[17] |= (UCHAR)(vRoll & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[17] |= (UCHAR)(vRoll & 0xFF);
 		Output[18] |= (UCHAR)(vRoll >> 8);
 
 		//timestamp
-		Output[10] |= (UCHAR)((USHORT)pGyroData->timestamp & 0xFF); // only has 1 sensor for yaw, needs interpolation from accelerometers
+		Output[10] |= (UCHAR)((USHORT)pGyroData->timestamp & 0xFF); 
 		Output[11] |= (UCHAR)((USHORT)pGyroData->timestamp >> 8);
 
 		//FrameCount

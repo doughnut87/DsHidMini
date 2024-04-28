@@ -1,5 +1,6 @@
 #include "Driver.h"
 #include "DsUsb.tmh"
+#include "Device.h"
 
 
 //
@@ -610,6 +611,8 @@ NTSTATUS DsUdb_PrepareHardware(WDFDEVICE Device)
 			ARRAYSIZE(identification)
 		)))
 		{
+			UpdateDeviceModel(pDevCtx, identification);
+
 			WDF_DEVICE_PROPERTY_DATA_INIT(&propertyData, &DEVPKEY_DsHidMini_RO_IdentificationData);
 			propertyData.Flags |= PLUGPLAY_PROPERTY_PERSISTENT;
 			propertyData.Lcid = LOCALE_NEUTRAL;

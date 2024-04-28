@@ -161,6 +161,11 @@ typedef struct _DS_OUTPUT_REPORT_CACHE
 	BOOLEAN IsRumbleInterpolatorStarted;
 
 	//
+	// Gyro output timer
+	// 
+	WDFTIMER GyroOutputCalibrationTimer;
+
+	//
 	// Pending packet buffer to send
 	// 
 	PVOID PendingClientBuffer;
@@ -386,11 +391,19 @@ EVT_WDF_TIMER DSHM_OutputReportDelayTimerElapsed;
 
 EVT_WDF_TIMER DSHM_OutputReportRumbleInterpolatorElapsed;
 
+EVT_WDF_TIMER DSHM_OutputReportGyroCalibrationElapsed;
+
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL DSHM_EvtWdfIoQueueIoDeviceControl;
 
 NTSTATUS
 DsDevice_ReadProperties(
 	WDFDEVICE Device
+);
+
+void
+UpdateDeviceModel(
+	PDEVICE_CONTEXT pDevCtx,
+	UCHAR identification[64]
 );
 
 VOID CALLBACK

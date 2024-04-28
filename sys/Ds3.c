@@ -493,7 +493,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 	{
 
 		if (!Context->OutputReport.Cache.IsRumbleInterpolatorStarted)
-			Context->OutputReport.Cache.IsRumbleInterpolatorStarted = WdfTimerStart(Context->OutputReport.Cache.RumbleInterpolatorTimer, WDF_REL_TIMEOUT_IN_MS(1));
+			Context->OutputReport.Cache.IsRumbleInterpolatorStarted = WdfTimerStart(Context->OutputReport.Cache.RumbleInterpolatorTimer, Context->ConnectionType == DsDeviceConnectionTypeBth ? WDF_REL_TIMEOUT_IN_MS(150) : WDF_REL_TIMEOUT_IN_MS(1));
 		Context->SmallRumble = Value;
 		return;
 	}
@@ -501,6 +501,7 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 	{
 		WdfTimerStop(Context->OutputReport.Cache.RumbleInterpolatorTimer, FALSE);
 		Context->OutputReport.Cache.IsRumbleInterpolatorStarted = FALSE;
+		DS3_SET_SMALL_RUMBLE_DURATION(Context, 0xFF);
 	}
 
 	// Only divert if small motor is not active
@@ -510,8 +511,8 @@ VOID DS3_SET_SMALL_RUMBLE_STRENGTH(
 	DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(Context);
 
 	// Do nothing
-	if (adjustedValue == Context->CurrentSmallRumble)
-		return;
+	//if (adjustedValue == Context->CurrentSmallRumble)
+	//	return;
 
 	Context->CurrentSmallRumble = adjustedValue;
 
@@ -590,8 +591,8 @@ static VOID DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(
 	if (adjustedValue > 0)
 	    adjustedValue = (UCHAR)((((USHORT)adjustedValue) * (USHORT)(255-Context->Configuration.LargeRumbleDeadzone))/255 + Context->Configuration.LargeRumbleDeadzone/2);
 
-	if (Context->GyroData.rumbleSettingForGyro > 0)
-		adjustedValue = Context->GyroData.rumbleSettingForGyro;
+	if (Context->GyroData.calibSettingForGyro > 0 && (Context->GyroData.calibModel & 0x1) != 0)
+		adjustedValue = Context->GyroData.calibSettingForGyro;
 
 	//if (adjustedValue == Context->CurrentLargeRumble)
 	//	return;
@@ -616,6 +617,60 @@ static VOID DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(
 				Context->OutputReportMemory,
 				NULL
 			), Context->CurrentLargeRumble);
+		break;
+	}
+}
+
+VOID DS3_SET_GYRO_DURATION(
+	PDEVICE_CONTEXT Context,
+	UCHAR Value
+)
+{
+	switch (Context->ConnectionType)
+	{
+	case DsDeviceConnectionTypeUsb:
+
+		DS3_USB_SET_GYRO_DURATION(
+			(PUCHAR)WdfMemoryGetBuffer(
+				Context->OutputReportMemory,
+				NULL
+			), Value);
+		break;
+
+	case DsDeviceConnectionTypeBth:
+
+		DS3_BTH_SET_GYRO_DURATION(
+			(PUCHAR)WdfMemoryGetBuffer(
+				Context->OutputReportMemory,
+				NULL
+			), Value);
+		break;
+	}
+}
+
+VOID DS3_SET_GYRO_STRENGTH(
+	PDEVICE_CONTEXT Context,
+	UCHAR Value
+)
+{
+	switch (Context->ConnectionType)
+	{
+	case DsDeviceConnectionTypeUsb:
+
+		DS3_USB_SET_GYRO_STRENGTH(
+			(PUCHAR)WdfMemoryGetBuffer(
+				Context->OutputReportMemory,
+				NULL
+			), Value);
+		break;
+
+	case DsDeviceConnectionTypeBth:
+
+		DS3_BTH_SET_GYRO_STRENGTH(
+			(PUCHAR)WdfMemoryGetBuffer(
+				Context->OutputReportMemory,
+				NULL
+			), Value);
 		break;
 	}
 }

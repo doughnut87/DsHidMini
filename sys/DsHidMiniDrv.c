@@ -1,5 +1,7 @@
 #include "Driver.h"
 #include "DsHidMiniDrv.tmh"
+//#include <time.h>
+//#include <stdio.h>
 
 
 PWSTR G_DsHidMini_Strings[] =
@@ -262,7 +264,7 @@ DMF_DsHidMini_Open(
 			TRACE_DSHIDMINIDRV,
 			"Unknown HID Device Mode: 0x%02X", pDevCtx->Configuration.HidDeviceMode);
 	}
-	
+
 	//
 	// Increase pad instance count (TODO: unused)
 	// 
@@ -982,10 +984,19 @@ DsHidMini_WriteReport(
 			bufferSize
 		);
 
-		//sixaxis crap
-		if (pDevCtx->GyroData.rumbleSettingForGyro > 0)
+		//Output Gyro calibration
+		if (pDevCtx->GyroData.calibSettingForGyro > 0)
 		{
-			DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
+			if ((pDevCtx->GyroData.calibModel & 0x1) != 0)
+			{
+				DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.calibSettingForGyro);
+				DS3_SET_LARGE_RUMBLE_DURATION(pDevCtx, 0xFF);
+			}
+			else if ((pDevCtx->GyroData.calibModel & 0x20) != 0)
+			{
+				DS3_SET_GYRO_STRENGTH(pDevCtx, pDevCtx->GyroData.calibSettingForGyro);
+				DS3_SET_GYRO_DURATION(pDevCtx, 0xFF);
+			}
 		}
 
 		(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourcePassThrough);
@@ -1165,6 +1176,114 @@ DsHidMini_WriteReport(
 
 #pragma region Input Report processing
 
+void DoCalibration(PDEVICE_CONTEXT Context, USHORT dYaw)
+{
+	LARGE_INTEGER now;
+	LARGE_INTEGER freq;
+	QueryPerformanceFrequency(&freq);
+	QueryPerformanceCounter(&now);
+
+	const USHORT deadzone = 20;
+
+	if (Context->GyroData.lastCalibStamp.QuadPart == 0)
+	{
+		Context->GyroData.lastCalibStamp = now;
+		return;
+	}
+
+	LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
+
+	if (Context->GyroData.calibSettingForGyro == 0 && ms < 2000)
+	{
+		return; // too early, gyro hasnt settled.
+	}
+
+	if (((Context->GyroData.calibModel & 0x4) != 0 && (dYaw == 0x3ff || dYaw == 0x0)) || // probably not supported
+		((Context->GyroData.calibModel & 0x2) != 0) // not required
+		)
+	{
+		Context->GyroData.calibOutputDone = TRUE;
+		return;
+	}
+
+	//FILE* file;
+	//errno_t err = fopen_s(&file, "d:\\development\\dshidmini.txt", "a");
+
+	//if (file != NULL) {
+	//	// Get the current time
+	//	time_t rawtime;
+	//	struct tm timeinfo;
+	//	char buffer[80];
+
+	//	time(&rawtime);
+	//	err = localtime_s(&timeinfo, &rawtime);
+
+	//	// Format the current time
+	//	strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &timeinfo);
+
+	//	fprintf(file, "%s On Calibration:\n", buffer);
+	//	// Write the variables to the file
+	//	fprintf(file, "calibModel: %d\n", Context->GyroData.calibModel);
+	//	fprintf(file, "yawOffset: %d\n", Context->GyroData.yawOffset);
+	//	fprintf(file, "calibSettingForGyro: %d\n", Context->GyroData.calibSettingForGyro);
+	//	fprintf(file, "calibDone: %d\n", Context->GyroData.calibDone);
+	//	fprintf(file, "yaw: %d\n", dYaw);
+
+	//	// Close the file
+	//	fclose(file);
+	//}
+
+	if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+	{
+		BOOLEAN hadCalib = Context->GyroData.calibSettingForGyro != 0;
+		if (dYaw < (512 - deadzone))
+		{
+			Context->GyroData.calibSettingForGyro++;
+
+		}
+		else if (dYaw > (512 + deadzone))
+		{
+			Context->GyroData.calibSettingForGyro--;
+
+		}
+		else
+		{
+			Context->GyroData.calibOutputDone = TRUE;
+			return;
+		}
+
+		if ((dYaw < 10 /* || dYaw > 1013*/) && !hadCalib)
+		{
+			Context->GyroData.calibSettingForGyro = 0x6e; // some baseline value
+		}
+
+		if ((Context->GyroData.calibModel & 0x4) != 0 && !hadCalib) // unknown, try ds calib
+		{
+			Context->GyroData.calibModel |= 0x20;
+		}
+
+		if ((Context->GyroData.calibModel & 0x4) != 0 && hadCalib && (dYaw < 10 /*|| dYaw > 1013*/)) // Tried to use ds calib, but didnt work, probably sixaxis?
+		{
+			Context->GyroData.calibModel &= ~0x20;
+			Context->GyroData.calibModel |= 0x1;
+			Context->GyroData.calibSettingForGyro = 0x6e; // some baseline value
+		}
+
+		if ((Context->GyroData.calibModel & 0x1) != 0)
+		{
+			DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.calibSettingForGyro);
+			DS3_SET_LARGE_RUMBLE_DURATION(Context, 0xFF);
+		}
+		else if ((Context->GyroData.calibModel & 0x20) != 0)
+		{
+			DS3_SET_GYRO_STRENGTH(Context, Context->GyroData.calibSettingForGyro);
+			DS3_SET_GYRO_DURATION(Context, 0xFF);
+		}
+		(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceDriverLowPriority);
+		Context->GyroData.lastCalibStamp = now;
+	}
+}
+
 /**
  * Process a raw input report depending on HID emulation mode.
  *
@@ -1265,58 +1384,42 @@ void Ds_ProcessHidInputReport(PDEVICE_CONTEXT Context, PDS3_RAW_INPUT_REPORT Rep
 
 	if (Context->Configuration.HidDeviceMode == DsHidMiniDeviceModeSixaxisCompatible)
 	{
-		DS3_RAW_TO_SIXAXIS_HID_INPUT_REPORT(
-			Report,
-			pModCtx->InputReport
-		);
+		if (Context->GyroData.calibModel > 0 && Context->GyroData.calibOutputDone == FALSE)
+		{
+			USHORT dYaw = _byteswap_ushort(Report->Gyroscope);
+			DoCalibration(Context, dYaw);
+		}
 
-		USHORT dYaw = _byteswap_ushort(Report->Gyroscope); // sixaxis test
-		if (Context->GyroData.calibDone == FALSE /*&& (dYaw < 10 || Context->GyroData.rumbleSettingForGyro != 0)*/)
+		// yaw correction
+		if (Context->GyroData.calibOutputDone == TRUE && Context->GyroData.calibInputDone == FALSE)
 		{
 			LARGE_INTEGER now;
 			LARGE_INTEGER freq;
 			QueryPerformanceFrequency(&freq);
 			QueryPerformanceCounter(&now);
 
-			const USHORT deadzone = 25;
-
-			if (dYaw < (512 - deadzone))
+			LONGLONG ms = (now.QuadPart - Context->GyroData.lastTimeStamp.QuadPart) / (freq.QuadPart / 1000);
+			if (Context->GyroData.lastTimeStamp.QuadPart == 0 || ms > 1000)
 			{
-				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
+				USHORT dYaw = _byteswap_ushort(Report->Gyroscope);
+				if (ms > 1000)
 				{
-					Context->GyroData.rumbleSettingForGyro++;
-					if (dYaw < 10)
+					if (abs((short)Context->GyroData.yawLast - (short)dYaw) < 2)
 					{
-						Context->GyroData.rumbleSettingForGyro = 105; // some baseline value
+						Context->GyroData.yawZero = dYaw;
+						Context->GyroData.calibInputDone = TRUE;
 					}
-					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
-					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
-					Context->GyroData.lastCalibStamp = now;
 				}
-
-			}
-			else if (dYaw > (512 + deadzone))
-			{
-				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
-				{
-					Context->GyroData.rumbleSettingForGyro--;
-					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
-					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
-					Context->GyroData.lastCalibStamp = now;
-				}
-			}
-			else
-			{
-				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
-				{
-					Context->GyroData.calibDone = TRUE;
-				}
+				Context->GyroData.lastTimeStamp = now;
+				Context->GyroData.yawLast = dYaw;
 			}
 		}
 
+		DS3_RAW_TO_SIXAXIS_HID_INPUT_REPORT(
+			Report,
+			pModCtx->InputReport
+		);
+		
 		//
 		// Notify new Input Report is available
 		// 
@@ -1337,60 +1440,19 @@ void Ds_ProcessHidInputReport(PDEVICE_CONTEXT Context, PDS3_RAW_INPUT_REPORT Rep
 
 	if (Context->Configuration.HidDeviceMode == DsHidMiniDeviceModeDS4WindowsCompatible)
 	{
+		if (Context->GyroData.calibModel > 0 && Context->GyroData.calibOutputDone == FALSE)
+		{
+			USHORT dYaw = _byteswap_ushort(Report->Gyroscope); 
+			DoCalibration(Context, dYaw);
+		}
+
 		DS3_RAW_TO_DS4REV1_HID_INPUT_REPORT(
 			Report,
 			pModCtx->InputReport,
 			(Context->ConnectionType == DsDeviceConnectionTypeUsb) ? TRUE : FALSE,
-			&Context->GyroData,
+			& Context->GyroData,
 			Context
 		);
-
-		USHORT dYaw = _byteswap_ushort(Report->Gyroscope); // sixaxis test
-		if (Context->GyroData.calibDone == FALSE/* && (dYaw < 10 || Context->GyroData.rumbleSettingForGyro != 0)*/)
-        {
-            LARGE_INTEGER now;
-            LARGE_INTEGER freq;
-            QueryPerformanceFrequency(&freq);
-            QueryPerformanceCounter(&now);
-			    
-            const USHORT deadzone = 25;
-
-            if (dYaw < (512 - deadzone))
-            {
-                LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-                if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
-                {
-					Context->GyroData.rumbleSettingForGyro++;
-                    if (dYaw < 10)
-                    {
-						Context->GyroData.rumbleSettingForGyro = 105; // some baseline value
-                    }
-                    DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
-                    (void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
-					Context->GyroData.lastCalibStamp = now;
-                }
-
-            }
-            else if (dYaw > (512 + deadzone))
-            {
-				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-				if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
-				{
-					Context->GyroData.rumbleSettingForGyro--;
-					DS3_SET_LARGE_RUMBLE_STRENGTH(Context, Context->GyroData.rumbleSettingForGyro);
-					(void)Ds_SendOutputReport(Context, Ds3OutputReportSourceForceFeedback);
-					Context->GyroData.lastCalibStamp = now;
-				}
-            }
-            else
-            {
-				LONGLONG ms = (now.QuadPart - Context->GyroData.lastCalibStamp.QuadPart) / (freq.QuadPart / 1000);
-                if (Context->GyroData.lastCalibStamp.QuadPart == 0 || ms > 150)
-                {
-					Context->GyroData.calibDone = TRUE;
-                }
-            }
-        }
 
 		//
 		// Notify new Input Report is available
@@ -1501,14 +1563,28 @@ VOID DsUsb_EvtUsbInterruptPipeReadComplete(
 		pModCtx->GetFeatureReport.AccelerometerZ = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerZ);
 		pModCtx->GetFeatureReport.Gyroscope = _byteswap_ushort(pModCtx->GetFeatureReport.Gyroscope);
 
-		//USHORT dYaw = _byteswap_ushort(pInReport->Gyroscope); // sixaxis test
-		//// weird sixaxis needing rumble voltage to enable gyroscope
-		//if (dYaw < 10 || dYaw > 1013 || pDevCtx->GyroData.rumbleSettingForGyro == 0)
-		//{
-		//	pDevCtx->GyroData.rumbleSettingForGyro = 105; // some baseline value
-		//	DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
-		//	(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
-		//}
+		if (pDevCtx->GyroData.yawZero != 0)
+		{
+			SHORT offset = 512 - pDevCtx->GyroData.yawZero;
+			offset += pModCtx->GetFeatureReport.Gyroscope;
+			if (offset > 0x3ff)
+			{
+				offset = 0x3ff;
+			}
+			if (offset < 0x0)
+			{
+				offset = 0;
+			}
+			pModCtx->GetFeatureReport.Gyroscope = offset;
+		}
+
+		if ((pDevCtx->GyroData.calibModel & 0x20) != 0 || 
+			(pDevCtx->GyroData.calibModel & 0x1) != 0 || 
+			(pDevCtx->GyroData.calibModel & 0x4) != 0 ||
+			(pDevCtx->GyroData.calibModel & 0x2) != 0) //pre-dualshock sixaxis seem to need it inverted ?
+		{
+			pModCtx->GetFeatureReport.Gyroscope = 0x03FF - pModCtx->GetFeatureReport.Gyroscope;
+		}
 	}
 	
 	battery = (DS_BATTERY_STATUS)pInReport->BatteryStatus;
@@ -1688,13 +1764,28 @@ DsBth_HidInterruptReadContinuousRequestCompleted(
 		pModCtx->GetFeatureReport.AccelerometerZ = _byteswap_ushort(pModCtx->GetFeatureReport.AccelerometerZ);
 		pModCtx->GetFeatureReport.Gyroscope = _byteswap_ushort(pModCtx->GetFeatureReport.Gyroscope);
 
-		////// weird sixaxis needing rumble voltage to enable gyroscope
-		//if (pModCtx->GetFeatureReport.Gyroscope < 10 || pModCtx->GetFeatureReport.Gyroscope > 1013 || pDevCtx->GyroData.rumbleSettingForGyro == 0)
-		//{
-		//	pDevCtx->GyroData.rumbleSettingForGyro = 105; // some baseline value
-		//	DS3_SET_LARGE_RUMBLE_STRENGTH(pDevCtx, pDevCtx->GyroData.rumbleSettingForGyro);
-		//	(void)Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
-		//}
+		if (pDevCtx->GyroData.yawZero != 0)
+		{
+			SHORT offset = 512 - pDevCtx->GyroData.yawZero;
+			offset += pModCtx->GetFeatureReport.Gyroscope;
+			if (offset > 0x3ff)
+			{
+				offset = 0x3ff;
+			}
+			if (offset < 0x0)
+			{
+				offset = 0;
+			}
+			pModCtx->GetFeatureReport.Gyroscope = offset;
+		}
+
+		if ((pDevCtx->GyroData.calibModel & 0x20) != 0 || 
+			(pDevCtx->GyroData.calibModel & 0x1) != 0 ||
+			(pDevCtx->GyroData.calibModel & 0x4) != 0 ||
+			(pDevCtx->GyroData.calibModel & 0x2) != 0) //pre-dualshock sixaxis seem to need it inverted ?
+		{
+			pModCtx->GetFeatureReport.Gyroscope = 0x03FF - pModCtx->GetFeatureReport.Gyroscope;
+		}
 	}
 
 	//
@@ -2260,6 +2351,14 @@ DSHM_OutputReportRumbleInterpolatorElapsed(
 	WDFDEVICE device = WdfTimerGetParentObject(Timer);
 	PDEVICE_CONTEXT pDevCtx = DeviceGetContext(device);
 
+	if (pDevCtx->ConnectionType == DsDeviceConnectionTypeBth)
+	{
+		DS3_SET_SMALL_RUMBLE_STRENGTH_Impl(pDevCtx, 1);
+		DS3_SET_SMALL_RUMBLE_DURATION(pDevCtx, (pDevCtx->SmallRumble * 6 / 0xff) + 1);
+		Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceDriverLowPriority);
+		return;
+	}
+
 	UCHAR adjusted = pDevCtx->SmallRumble >> 5;
 
 	if (pDevCtx->SmallRumbleCounter >= 8)
@@ -2276,7 +2375,20 @@ DSHM_OutputReportRumbleInterpolatorElapsed(
 
 	pDevCtx->CurrentSmallRumble = newValue;
 	DS3_SET_SMALL_RUMBLE_STRENGTH_Impl(pDevCtx, pDevCtx->CurrentSmallRumble);
-	Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceForceFeedback);
+	Ds_SendOutputReport(pDevCtx, Ds3OutputReportSourceDriverLowPriority);
+}
+
+//
+// Callback invoked continuously every minute
+// 
+void
+DSHM_OutputReportGyroCalibrationElapsed(
+	WDFTIMER Timer
+)
+{
+	WDFDEVICE device = WdfTimerGetParentObject(Timer);
+	PDEVICE_CONTEXT pDevCtx = DeviceGetContext(device);
+	pDevCtx->GyroData.calibInputDone = FALSE;
 }
 
 //

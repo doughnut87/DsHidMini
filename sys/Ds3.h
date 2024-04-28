@@ -24,6 +24,8 @@ extern const UCHAR G_Ds3BthHidOutputReport[];
 #define DS3_USB_SET_LARGE_RUMBLE_DURATION(_buf_, _dur_)  ((_buf_)[4] = (_dur_))
 #define DS3_USB_SET_SMALL_RUMBLE_STRENGTH(_buf_, _str_)  ((_buf_)[3] = (_str_) > 0 ? 0x01 : 0x00)
 #define DS3_USB_SET_LARGE_RUMBLE_STRENGTH(_buf_, _str_)  ((_buf_)[5] = (_str_))
+#define DS3_USB_SET_GYRO_DURATION(_buf_, _dur_)  ((_buf_)[6] = (_dur_))
+#define DS3_USB_SET_GYRO_STRENGTH(_buf_, _dur_)  ((_buf_)[7] = (_dur_))
 
 #define DS3_BTH_SET_LED(_buf_, _led_)   ((_buf_)[11] = (_led_))
 #define DS3_BTH_GET_LED(_buf_)          ((_buf_)[11])
@@ -32,6 +34,8 @@ extern const UCHAR G_Ds3BthHidOutputReport[];
 #define DS3_BTH_SET_LARGE_RUMBLE_DURATION(_buf_, _dur_)  ((_buf_)[5] = (_dur_))
 #define DS3_BTH_SET_SMALL_RUMBLE_STRENGTH(_buf_, _str_)  ((_buf_)[4] = (_str_) > 0 ? 0x01 : 0x00)
 #define DS3_BTH_SET_LARGE_RUMBLE_STRENGTH(_buf_, _str_)  ((_buf_)[6] = (_str_))
+#define DS3_BTH_SET_GYRO_DURATION(_buf_, _dur_)  ((_buf_)[7] = (_dur_))
+#define DS3_BTH_SET_GYRO_STRENGTH(_buf_, _dur_)  ((_buf_)[8] = (_dur_))
 
 
 VOID DS3_SET_LED_DURATION(
@@ -96,6 +100,16 @@ VOID DS3_SET_LARGE_RUMBLE_STRENGTH(
 
 static VOID DS3_SET_LARGE_RUMBLE_STRENGTH_Impl(
 	PDEVICE_CONTEXT Context
+);
+
+VOID DS3_SET_GYRO_DURATION(
+	PDEVICE_CONTEXT Context,
+	UCHAR Value
+);
+
+VOID DS3_SET_GYRO_STRENGTH(
+	PDEVICE_CONTEXT Context,
+	UCHAR Value
 );
 
 
